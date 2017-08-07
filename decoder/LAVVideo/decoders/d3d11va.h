@@ -24,6 +24,8 @@
 #include <d3d11.h>
 #include <dxgi.h>
 
+#include "d3d11/D3D11SurfaceAllocator.h"
+
 extern "C" {
 #include "libavutil/hwcontext.h"
 #include "libavutil/hwcontext_d3d11va.h"
@@ -69,6 +71,8 @@ private:
   static int get_d3d11_buffer(struct AVCodecContext *c, AVFrame *pic, int flags);
 
 private:
+  CD3D11SurfaceAllocator *m_pAllocator = nullptr;
+
   AVBufferRef *m_pDevCtx = nullptr;
   AVBufferRef *m_pFramesCtx = nullptr;
 

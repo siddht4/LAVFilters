@@ -177,6 +177,9 @@
     <ClCompile Include="decoders\d3d11va.cpp">
       <Filter>Source Files\decoders</Filter>
     </ClCompile>
+    <ClCompile Include="decoders\d3d11\D3D11SurfaceAllocator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
@@ -289,6 +292,9 @@
     </ClInclude>
     <ClInclude Include="decoders\d3d11\ID3DVideoMemoryConfiguration.h">
       <Filter>Header Files\decoders\d3d11</Filter>
+    </ClInclude>
+    <ClInclude Include="decoders\d3d11\D3D11SurfaceAllocator.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

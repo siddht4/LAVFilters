@@ -32,3 +32,23 @@ interface __declspec(uuid("7C374890-2529-4F16-B652-2E67F5BC3742")) ID3DVideoMemo
   // Get the currently preferred D3D11 adapter index (to be used with IDXGIFactory1::EnumAdapters1)
   virtual UINT STDMETHODCALLTYPE GetD3D11AdapterIndex() = 0;
 };
+
+// -----------------------------------------------------------------
+// Media Sample to hold a D3D11 texture
+// -----------------------------------------------------------------
+// D3D11 textures used for decoding are typically array-textures,
+// a single ID3D11Texture2D object containing an array of textures
+// individually addressable by the ArraySlice index.
+//
+// The ID3D11Texture2D object returned from this function has to be
+// released when it is no longer needed.
+//
+// The texture lifetime is bound to the media samples lifetime. The
+// media sample can only be released when the texture is no longer in
+// use, otherwise the texture will be re-used by the decoder.
+interface __declspec(uuid("BC8753F5-0AC8-4806-8E5F-A12B2AFE153E")) IMediaSampleD3D11 : public IUnknown
+{
+  // Get the D3D11 texture for the specified view.
+  // 2D images with only one view always use view 0. For 3D, view 0 specifies the base view, view 1 the extension view.
+  virtual HRESULT STDMETHODCALLTYPE GetD3D11Texture(int nView, ID3D11Texture2D **ppTexture, UINT *pArraySlice) = 0;
+};

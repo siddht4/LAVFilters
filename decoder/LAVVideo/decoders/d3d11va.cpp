@@ -40,6 +40,7 @@ CDecD3D11::CDecD3D11(void)
 CDecD3D11::~CDecD3D11(void)
 {
   DestroyDecoder(true);
+  SafeRelease(&m_pAllocator);
 }
 
 STDMETHODIMP CDecD3D11::DestroyDecoder(bool bFull, bool bNoAVCodec)
@@ -71,22 +72,28 @@ STDMETHODIMP CDecD3D11::DestroyDecoder(bool bFull, bool bNoAVCodec)
 // ILAVDecoder
 STDMETHODIMP CDecD3D11::InitAllocator(IMemAllocator **ppAlloc)
 {
-  /*HRESULT hr = S_OK;
-  if (!m_bNative)
+  HRESULT hr = S_OK;
+  if (m_bReadBackFallback)
     return E_NOTIMPL;
 
-  m_pDXVA2Allocator = new CDXVA2SurfaceAllocator(this, &hr);
-  if (!m_pDXVA2Allocator) {
+  m_pAllocator = new CD3D11SurfaceAllocator(&hr);
+  if (!m_pAllocator) {
     return E_OUTOFMEMORY;
   }
   if (FAILED(hr)) {
-    SAFE_DELETE(m_pDXVA2Allocator);
+    SAFE_DELETE(m_pAllocator);
     return hr;
   }
 
-  return m_pDXVA2Allocator->QueryInterface(__uuidof(IMemAllocator), (void **)ppAlloc);*/
+  // Hold a reference on the allocator
+  m_pAllocator->AddRef();
 
-  return E_NOTIMPL;
+  // set the frames context on the allocator, if its already present
+  if (m_pFramesCtx)
+    m_pAllocator->SetFramesContext(m_pFramesCtx);
+
+  // return the proper interface
+  return m_pAllocator->QueryInterface(__uuidof(IMemAllocator), (void **)ppAlloc);
 }
 
 STDMETHODIMP CDecD3D11::PostConnect(IPin *pPin)
@@ -308,6 +315,10 @@ STDMETHODIMP CDecD3D11::ReInitD3D11Decoder(AVCodecContext *c)
   if (m_pDevCtx == nullptr)
     return E_FAIL;
 
+  // we need an allocator at this point
+  if (m_bReadBackFallback == false && m_pAllocator == nullptr)
+    return E_FAIL;
+
   if (m_pDecoder == nullptr || m_dwSurfaceWidth != dxva_align_dimensions(c->codec_id, c->coded_width) || m_dwSurfaceHeight != dxva_align_dimensions(c->codec_id, c->coded_height) || m_DecodePixelFormat != c->sw_pix_fmt)
   {
     DbgLog((LOG_TRACE, 10, L"No D3D11 Decoder or image dimensions changed -> Re-Allocating resources"));
@@ -319,6 +330,14 @@ STDMETHODIMP CDecD3D11::ReInitD3D11Decoder(AVCodecContext *c)
     hr = CreateD3D11Decoder();
     if (FAILED(hr))
       return hr;
+
+    // Update the frames context in the allocator
+    if (m_bReadBackFallback == false)
+    {
+      m_pAllocator->Decommit();
+      m_pAllocator->SetFramesContext(m_pFramesCtx);
+      m_pAllocator->Commit();
+    }
   }
 
   return S_OK;
@@ -563,6 +582,13 @@ STDMETHODIMP CDecD3D11::AllocateFramesContext(int width, int height, AVPixelForm
   return S_OK;
 }
 
+static void lav_mediasample_free(LAVFrame *frame)
+{
+  IMediaSample *pSample = (IMediaSample *)frame->data[0];
+  SafeRelease(&pSample);
+}
+
+
 HRESULT CDecD3D11::HandleDXVA2Frame(LAVFrame *pFrame)
 {
   ASSERT(pFrame->format == LAVPixFmt_D3D11);
@@ -598,7 +624,22 @@ HRESULT CDecD3D11::HandleDXVA2Frame(LAVFrame *pFrame)
   }
   else
   {
-    ReleaseFrame(&pFrame);
+    AVFrame *pAVFrame = (AVFrame *)pFrame->priv_data;
+
+    IMediaSample *pSample = nullptr;
+    HRESULT hr = m_pAllocator->GetBufferForFrame(pAVFrame, &pSample);
+    if (FAILED(hr))
+    {
+      ReleaseFrame(&pFrame);
+      return E_FAIL;
+    }
+
+    pFrame->destruct = lav_mediasample_free;
+    pFrame->priv_data = nullptr;
+    pFrame->data[0] = (BYTE *)pSample;
+    pFrame->data[1] = pFrame->data[2] = pFrame->data[3] = nullptr;
+
+    Deliver(pFrame);
   }
 
   return S_OK;
